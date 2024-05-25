@@ -1,75 +1,119 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DATA } from "@/static";
+
 import KanbanBlock from "./KanbanBlock";
 import KanbanItem from "./KanbanItem";
-
-const STATUS_ITEMS = ["ready", "working", "stuck", "done"];
+import { DATA } from "@/static";
 
 const KanbanBoard = () => {
+  const initialStatusItems =
+    JSON.parse(localStorage.getItem("kanban-statuses")) || [];
+
   const [data, setData] = useState(
-    JSON.parse(localStorage.getItem("karban-data")) || DATA
+    JSON.parse(localStorage.getItem("kanban-data")) || DATA
   );
+  const [statusItems, setStatusItems] = useState(initialStatusItems);
   const [selectedStatus, setSelectedStatus] = useState(null);
   const [changesStatus, setChangesStatus] = useState(null);
+  const [newStatus, setNewStatus] = useState("");
+  const [isAddingStatus, setIsAddingStatus] = useState(false);
+  const [error, setError] = useState("");
 
-  const title = useRef(null);
-  const desc = useRef(null);
+  const titleRef = useRef(null);
+  const descRef = useRef(null);
 
   useEffect(() => {
-    localStorage.setItem("karban-data", JSON.stringify(data));
+    localStorage.setItem("kanban-data", JSON.stringify(data));
   }, [data]);
 
   useEffect(() => {
+    localStorage.setItem("kanban-statuses", JSON.stringify(statusItems));
+  }, [statusItems]);
+
+  useEffect(() => {
     if (changesStatus) {
-      let index = data?.findIndex((el) => el.id === changesStatus.id);
-      data?.splice(index, 1, changesStatus);
-      setData([...data]);
+      const updatedData = data.map((item) =>
+        item.id === changesStatus.id ? changesStatus : item
+      );
+      setData(updatedData);
+      setChangesStatus(null);
     }
-  }, [changesStatus]);
+  }, [changesStatus, data]);
+  console.log(statusItems.length);
 
-  const filterByStatus = (status) => {
-    return data
-      ?.filter((el) => el.status === status)
-      ?.map((el) => (
-        <KanbanItem
-          setChangesStatus={setChangesStatus}
-          el={el}
-          STATUS_ITEMS={STATUS_ITEMS}
-          key={el.id}
-        />
-      ));
-  };
-
-  let memoFilterByStatus = useCallback(
+  const filterByStatus = useCallback(
     (status) => {
-      return filterByStatus(status);
+      return data
+        .filter((item) => item.status === status)
+        .map((item) => (
+          <KanbanItem
+            key={item.id}
+            setChangesStatus={setChangesStatus}
+            item={item}
+            STATUS_ITEMS={statusItems}
+            handleDelete={handleDelete}
+          />
+        ));
     },
-    [data]
+    [data, statusItems]
   );
 
   const handleCreateItem = (e) => {
     e.preventDefault();
-    let date = new Date();
-    let timeZoneGMT = (hour) =>
-      new Date(date.getTime() + hour * 60 * 60 * 1000);
-    let newItems = {
-      id: date,
-      title: title.current.value,
-      desc: desc.current.value,
+    const newDate = new Date();
+    const newItem = {
+      id: newDate.getTime(),
+      title: titleRef.current.value,
+      desc: descRef.current.value,
       status: selectedStatus,
-      createdAt: timeZoneGMT(5).toISOString(),
+      createdAt: newDate.toISOString(),
     };
-    setData((prev) => [...prev, newItems]);
-    console.log(
-      "newItems>>",
-      newItems,
-      "timeZone>>",
-      timeZoneGMT(5).toISOString
-    );
-
+    setData((prev) => [...prev, newItem]);
     setSelectedStatus(null);
-    title.current.value = "";
-    desc.current.value = "";
+    titleRef.current.value = "";
+    descRef.current.value = "";
+  };
+
+  const handleAddKanban = () => {
+    setIsAddingStatus(true);
+  };
+
+  const handleSaveStatus = () => {
+    if (statusItems.length >= 4) {
+      alert(
+        "Siz maximum 4 ta status yarat olasiz ,Ko`proq hohlasangiz premiumni oling"
+      );
+      return;
+    }
+    if (
+      statusItems.find(
+        (item) => item.status.toLowerCase() === newStatus.toLowerCase()
+      )
+    ) {
+      setError("This status already exists");
+    } else {
+      const newStatusItem = {
+        id: new Date().getTime(),
+        status: newStatus,
+      };
+      setStatusItems((prev) => [...prev, newStatusItem]);
+      setIsAddingStatus(false);
+      setNewStatus("");
+      setError("");
+    }
+  };
+
+  const handleDelete = (statusId) => {
+    if (confirm("Are you sure")) {
+      const updatedStatusItems = statusItems.filter(
+        (item) => item.id !== statusId
+      );
+
+      setStatusItems(updatedStatusItems);
+    }
+  };
+  const handleCloseOverlay = () => {
+    setSelectedStatus(null);
+    setIsAddingStatus(false);
   };
 
   return (
@@ -78,26 +122,86 @@ const KanbanBoard = () => {
         <div className="kanban">
           <h2 className="kanban__title">Kanban Board</h2>
           <div className="kanban__header">
-            <button className="kanban__btn">Add</button>
+            <button className="kanban__btn" onClick={handleAddKanban}>
+              Add
+            </button>
           </div>
+
+          <form
+            className={
+              isAddingStatus
+                ? "kanban__add-status show-status"
+                : "kanban__add-status"
+            }
+          >
+            <input
+              type="text"
+              value={newStatus}
+              onChange={(e) => setNewStatus(e.target.value)}
+              placeholder="Enter new status"
+            />
+            <div className="kanban__add-status__btns">
+              <button className="save__btn" onClick={handleSaveStatus}>
+                Save
+              </button>
+              <button className="cancel__btn" onClick={handleCloseOverlay}>
+                Cancel
+              </button>
+            </div>
+            {error && <p className="error">{error}</p>}
+          </form>
+
+          {selectedStatus || isAddingStatus ? (
+            <div onClick={handleCloseOverlay} className="overlay"></div>
+          ) : (
+            <></>
+          )}
           <form
             onSubmit={handleCreateItem}
             className={`kanban__form ${selectedStatus ? "show" : ""}`}
           >
             <p>Create something</p>
-            <input required ref={title} type="text" />
-            <input required ref={desc} type="text" />
-            <button>Create</button>
-            <button type="button" onClick={() => setSelectedStatus(null)}>
+            <input required ref={titleRef} type="text" placeholder="Title" />
+            <input
+              required
+              ref={descRef}
+              type="text"
+              placeholder="Description"
+            />
+            <button type="submit" className="create__btn">
+              Create
+            </button>
+            <button
+              className="cancel__btn"
+              type="button"
+              onClick={() => setSelectedStatus(null)}
+            >
               Cancel
             </button>
           </form>
-          <div className="kanban__wrapper">
-            <KanbanBlock
-              STATUS_ITEMS={STATUS_ITEMS}
-              items={memoFilterByStatus}
-              setSelectedStatus={setSelectedStatus}
-            />
+          <div
+            className={
+              statusItems.length === 0
+                ? "kanban__wrapper   flex__kanban"
+                : "kanban__wrapper"
+            }
+          >
+            {statusItems.length > 0 ? (
+              statusItems.map((statusItem) => (
+                <KanbanBlock
+                  key={statusItem.id}
+                  statusItem={statusItem}
+                  items={filterByStatus}
+                  setSelectedStatus={setSelectedStatus}
+                  handleDelete={handleDelete}
+                />
+              ))
+            ) : (
+              <div className="empty__desk">
+                <h1>Ishingizni tartibga soling</h1>
+                <button onClick={handleAddKanban}>Get started</button>
+              </div>
+            )}
           </div>
         </div>
       </div>
